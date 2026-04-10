@@ -29,6 +29,11 @@ With composition uncertainties (and optional correlations)::
 Length-60 numpy arrays are still accepted for all three inputs, in the
 component order of ISO 6976:2016 Table A.2.
 
+.. note::
+
+    All uncertainties in this package are **standard uncertainties**,
+    both on the input side and in the returned ``u_*`` values.
+
 The result dictionary contains (all numeric scalars):
 
 ================= ============================================ ==========

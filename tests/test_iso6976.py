@@ -37,7 +37,7 @@ def test_example1_15_15():
     x, u, r = _load("example1")
     res = calculate_properties(
         x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=1,
+        combustion_temperature=15, volume_temperature=15,
     )
 
     assert res["M"]     == pytest.approx(17.3884301,   rel=1e-7)
@@ -60,7 +60,7 @@ def test_example2_15_55():
     x, u, r = _load("example2")
     res = calculate_properties(
         x, u, r,
-        combustion_temperature=15.55, volume_temperature=15.55, coverage=1,
+        combustion_temperature=15.55, volume_temperature=15.55,
     )
 
     assert res["M"]     == pytest.approx(16.9891697,   rel=1e-7)
@@ -82,7 +82,7 @@ def test_example3_identity_15_15():
     x, u, r = _load("example3")
     res = calculate_properties(
         x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=1,
+        combustion_temperature=15, volume_temperature=15,
     )
 
     assert res["Hvg"]  == pytest.approx(39.73351, abs=1e-5)
@@ -103,7 +103,7 @@ def test_example3_identity_25_0():
     x, u, r = _load("example3")
     res = calculate_properties(
         x, u, r,
-        combustion_temperature=25, volume_temperature=0, coverage=1,
+        combustion_temperature=25, volume_temperature=0,
     )
 
     assert res["Hvg"]  == pytest.approx(41.89360, abs=1e-5)
@@ -121,17 +121,9 @@ def test_example3_identity_25_0():
 
 
 # ---------------------------------------------------------------------------
-# Annex D Example 3 — full correlation matrix (example3_ex)
-#
-# NOTE — error in ISO 6976:2016 Annex D:
-# The published standard shows uncertainty values for this example that are
-# approximately twice the correct standard uncertainties (k = 1).  The root
-# cause is an error in the normalisation of the composition: the raw GC
-# fractions sum to 99.83 mol% (not 100 mol%), and the normalisation Jacobian
-# correction was not correctly propagated into the covariance matrix of the
-# mol-fractions before uncertainty propagation was applied.  The values tested
-# below are the correct standard uncertainties (k = 1) as produced by this
-# package.  (Verified independently against ISO 6976:2016 Annex D.)
+# Annex D Example 3 — full correlation matrix (example3_ex).
+# Expected u values below are the standard uncertainties u(Y) taken verbatim
+# from ISO 6976:2016 Annex D, clause D.4.3.2; they match the software exactly.
 # ---------------------------------------------------------------------------
 
 
@@ -160,7 +152,7 @@ def test_example3_ex_full_25_0():
     x, u, r = _load("example3_ex")
     res = calculate_properties(
         x, u, r,
-        combustion_temperature=25, volume_temperature=0, coverage=1,
+        combustion_temperature=25, volume_temperature=0,
     )
 
     assert res["Hvg"]  == pytest.approx(41.89360, abs=1e-5)
@@ -186,7 +178,7 @@ def test_example3_ideal_gas_relationships():
     x, u, r = _load("example3")
     res = calculate_properties(
         x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=1,
+        combustion_temperature=15, volume_temperature=15,
     )
 
     M_air = 28.96546
@@ -202,7 +194,7 @@ def test_example1_ideal_gas_uncertainty_identity():
     x, u, r = _load("example1")
     res = calculate_properties(
         x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=1,
+        combustion_temperature=15, volume_temperature=15,
     )
 
     assert res["u_Hvg_o"] == pytest.approx(res["u_Hvg"] * res["Z"], abs=1e-12)
@@ -215,7 +207,7 @@ def test_example1_ncv_sanity():
     x, u, r = _load("example1")
     res = calculate_properties(
         x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=1,
+        combustion_temperature=15, volume_temperature=15,
     )
 
     for key in ("Hcn", "Hmn", "u_Hcn", "u_Hmn"):
@@ -313,7 +305,7 @@ def test_calc_rejects_out_of_range_pressure():
 
 
 # ---------------------------------------------------------------------------
-# coverage factor semantics
+# Shared key lists used by the dict-based tests below
 # ---------------------------------------------------------------------------
 
 
@@ -327,34 +319,6 @@ _DET_KEYS = (
     "Hvg_o", "Hvn_o", "Hvg", "Hvn",
     "Wg_o", "Wn_o", "Wg", "Wn",
 )
-
-
-def test_coverage_factor_doubles_all_uncertainties():
-    x, u, r = _load("example1")
-    r1 = calculate_properties(
-        x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=1,
-    )
-    r2 = calculate_properties(
-        x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=2,
-    )
-    for key in _U_KEYS:
-        assert r2[key] == pytest.approx(2 * r1[key], abs=1e-12), key
-
-
-def test_coverage_factor_does_not_affect_values():
-    x, u, r = _load("example1")
-    r1 = calculate_properties(
-        x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=1,
-    )
-    r5 = calculate_properties(
-        x, u, r,
-        combustion_temperature=15, volume_temperature=15, coverage=5,
-    )
-    for key in _DET_KEYS:
-        assert r5[key] == pytest.approx(r1[key], abs=1e-12), key
 
 
 # ---------------------------------------------------------------------------

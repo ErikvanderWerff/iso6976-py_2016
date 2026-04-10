@@ -102,8 +102,8 @@ The returned dictionary contains numeric scalars under the following keys:
 | `Wg`,   `u_Wg`     | Real-gas gross Wobbe index               | MJ/m³   |
 | `Wn`,   `u_Wn`     | Real-gas net Wobbe index                 | MJ/m³   |
 
-Uncertainties are standard uncertainties (k = 1) by default. Pass
-`coverage=2` to `calculate_properties` for expanded (k = 2) uncertainties.
+All uncertainties in this package are **standard uncertainties**, both on
+the input side and in the returned `u_*` values.
 
 ## Credits
 

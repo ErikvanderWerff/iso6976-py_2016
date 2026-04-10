@@ -99,7 +99,6 @@ def calculate_properties(
     combustion_temperature: float = 25.0,
     volume_temperature: float = 15.0,
     pressure: float = 101.325,
-    coverage: float = 1.0,
 ) -> dict[str, float]:
     """Calculate natural gas properties per ISO 6976:2016.
 
@@ -137,9 +136,9 @@ def calculate_properties(
         Default: 15.
     pressure
         Reference pressure in kPa. Must be in [90, 110]. Default: 101.325.
-    coverage
-        Coverage factor *k*; uncertainties are multiplied by *k* before
-        being returned. Default: 1 (standard uncertainty).
+
+    All input uncertainties are standard uncertainties, and all ``u_*``
+    values in the result are likewise standard uncertainties.
 
     Returns
     -------
@@ -164,7 +163,6 @@ def calculate_properties(
 
     kh = idx_hc(combustion_temperature)
     ks = idx_s(volume_temperature)
-    k = coverage
 
     ctx = _calc.build_context(x, u, r, kh, ks, pressure)
     if ctx.Z <= 0.9:
@@ -218,18 +216,18 @@ def calculate_properties(
         "Z":      Z,
         "G_o":    G_o,
         "D_o":    D_o,
-        "G":      G,      "u_G":     k * uG,
-        "D":      D,      "u_D":     k * uD,
-        "Hcg":    Hcg,    "u_Hcg":   k * uHcg,
-        "Hcn":    Hcn,    "u_Hcn":   k * uHcn,
-        "Hmg":    Hmg,    "u_Hmg":   k * uHmg,
-        "Hmn":    Hmn,    "u_Hmn":   k * uHmn,
-        "Hvg_o":  Hvg_o,  "u_Hvg_o": k * uHvg_o,
-        "Hvn_o":  Hvn_o,  "u_Hvn_o": k * uHvn_o,
-        "Hvg":    Hvg,    "u_Hvg":   k * uHvg,
-        "Hvn":    Hvn,    "u_Hvn":   k * uHvn,
+        "G":      G,      "u_G":     uG,
+        "D":      D,      "u_D":     uD,
+        "Hcg":    Hcg,    "u_Hcg":   uHcg,
+        "Hcn":    Hcn,    "u_Hcn":   uHcn,
+        "Hmg":    Hmg,    "u_Hmg":   uHmg,
+        "Hmn":    Hmn,    "u_Hmn":   uHmn,
+        "Hvg_o":  Hvg_o,  "u_Hvg_o": uHvg_o,
+        "Hvn_o":  Hvn_o,  "u_Hvn_o": uHvn_o,
+        "Hvg":    Hvg,    "u_Hvg":   uHvg,
+        "Hvn":    Hvn,    "u_Hvn":   uHvn,
         "Wg_o":   Wg_o,
         "Wn_o":   Wn_o,
-        "Wg":     Wg,     "u_Wg":    k * uWg,
-        "Wn":     Wn,     "u_Wn":    k * uWn,
+        "Wg":     Wg,     "u_Wg":    uWg,
+        "Wn":     Wn,     "u_Wn":    uWn,
     }
