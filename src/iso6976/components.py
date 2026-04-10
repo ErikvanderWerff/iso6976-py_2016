@@ -1,8 +1,6 @@
-"""Gas component names and the :class:`GasComponents` helper class."""
+"""Gas component names and name ↔ index helpers."""
 
 from __future__ import annotations
-
-import numpy as np
 
 from ._tables import N_COMPONENTS
 
@@ -98,84 +96,3 @@ def component_name(index: int) -> str:
     if not 0 <= index < N_COMPONENTS:
         raise IndexError(f"index must be between 0 and {N_COMPONENTS - 1}")
     return _COMPONENT_NAMES[index]
-
-
-# ---------------------------------------------------------------------------
-# GasComponents helper
-# ---------------------------------------------------------------------------
-
-
-class GasComponents:
-    """Holder for mole fractions, standard uncertainties and correlations.
-
-    All three quantities are required by :func:`iso6976.calculate_properties`.
-    Components are identified either by 0-based integer index (0–59) or by
-    English name (see :func:`component_names`).
-    """
-
-    def __init__(self) -> None:
-        self.fractions: np.ndarray = np.zeros(N_COMPONENTS, dtype=np.float64)
-        self.uncertainties: np.ndarray = np.zeros(N_COMPONENTS, dtype=np.float64)
-        self.correlations: np.ndarray = np.eye(N_COMPONENTS, dtype=np.float64)
-
-    # -- internal ---------------------------------------------------------
-
-    @staticmethod
-    def _resolve(key: int | str) -> int:
-        if isinstance(key, (int, np.integer)):
-            idx = int(key)
-            if not 0 <= idx < N_COMPONENTS:
-                raise IndexError(
-                    f"index must be between 0 and {N_COMPONENTS - 1}"
-                )
-            return idx
-        return component_index(key)
-
-    # -- single-component getters/setters --------------------------------
-
-    def get_fraction(self, key: int | str) -> float:
-        return float(self.fractions[self._resolve(key)])
-
-    def set_fraction(self, key: int | str, value: float) -> None:
-        self.fractions[self._resolve(key)] = value
-
-    def get_uncertainty(self, key: int | str) -> float:
-        return float(self.uncertainties[self._resolve(key)])
-
-    def set_uncertainty(self, key: int | str, value: float) -> None:
-        self.uncertainties[self._resolve(key)] = value
-
-    def get_correlation(self, key1: int | str, key2: int | str) -> float:
-        return float(self.correlations[self._resolve(key1), self._resolve(key2)])
-
-    def set_correlation(
-        self, key1: int | str, key2: int | str, value: float
-    ) -> None:
-        i = self._resolve(key1)
-        j = self._resolve(key2)
-        self.correlations[i, j] = value
-        self.correlations[j, i] = value
-
-    # -- bulk setters -----------------------------------------------------
-
-    def set_fraction_array(self, x: np.ndarray) -> None:
-        x = np.asarray(x, dtype=np.float64)
-        if x.shape != (N_COMPONENTS,):
-            raise ValueError(f"x must have length {N_COMPONENTS}")
-        self.fractions = x.copy()
-
-    def set_uncertainty_array(self, u: np.ndarray) -> None:
-        u = np.asarray(u, dtype=np.float64)
-        if u.shape != (N_COMPONENTS,):
-            raise ValueError(f"u must have length {N_COMPONENTS}")
-        self.uncertainties = u.copy()
-
-    def set_correlation_matrix(self, r: np.ndarray) -> None:
-        r = np.asarray(r, dtype=np.float64)
-        if r.shape != (N_COMPONENTS, N_COMPONENTS):
-            raise ValueError(
-                f"r must be a {N_COMPONENTS}x{N_COMPONENTS} matrix"
-            )
-        if np.any(r < -1.0) or np.any(r > 1.0):
-            raise ValueError("All correlation coefficients must be in [-1, 1]")
-        self.correlations = r.copy()

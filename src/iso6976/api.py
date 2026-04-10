@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Mapping, Sequence, Union
+
 import numpy as np
 
 from . import _calc
@@ -15,6 +17,13 @@ from ._tables import (
     idx_hc,
     idx_s,
 )
+from .components import component_index
+
+CompositionInput = Union[Mapping[str, float], Sequence[float], np.ndarray]
+UncertaintyInput = Union[Mapping[str, float], Sequence[float], np.ndarray, None]
+CorrelationInput = Union[
+    Mapping[tuple[str, str], float], Sequence[Sequence[float]], np.ndarray, None
+]
 
 
 def _normalize_temperature(
@@ -28,10 +37,64 @@ def _normalize_temperature(
     return t
 
 
+def _composition_to_array(composition: CompositionInput) -> np.ndarray:
+    if isinstance(composition, Mapping):
+        x = np.zeros(N_COMPONENTS, dtype=np.float64)
+        for name, value in composition.items():
+            x[component_index(name)] = float(value)
+        return x
+    x = np.asarray(composition, dtype=np.float64)
+    if x.shape != (N_COMPONENTS,):
+        raise ValueError(f"composition must have length {N_COMPONENTS}")
+    return x
+
+
+def _uncertainty_to_array(uncertainty: UncertaintyInput) -> np.ndarray:
+    if uncertainty is None:
+        return np.zeros(N_COMPONENTS, dtype=np.float64)
+    if isinstance(uncertainty, Mapping):
+        u = np.zeros(N_COMPONENTS, dtype=np.float64)
+        for name, value in uncertainty.items():
+            u[component_index(name)] = float(value)
+        return u
+    u = np.asarray(uncertainty, dtype=np.float64)
+    if u.shape != (N_COMPONENTS,):
+        raise ValueError(f"uncertainty must have length {N_COMPONENTS}")
+    return u
+
+
+def _correlation_to_matrix(correlation: CorrelationInput) -> np.ndarray:
+    if correlation is None:
+        return np.eye(N_COMPONENTS, dtype=np.float64)
+    if isinstance(correlation, Mapping):
+        m = np.eye(N_COMPONENTS, dtype=np.float64)
+        for key, value in correlation.items():
+            if not (isinstance(key, tuple) and len(key) == 2):
+                raise ValueError(
+                    "correlation dict keys must be (name1, name2) tuples"
+                )
+            i = component_index(key[0])
+            j = component_index(key[1])
+            v = float(value)
+            if not -1.0 <= v <= 1.0:
+                raise ValueError(
+                    "correlation coefficients must be in [-1, 1]"
+                )
+            m[i, j] = v
+            m[j, i] = v
+        return m
+    m = np.asarray(correlation, dtype=np.float64)
+    if m.shape != (N_COMPONENTS, N_COMPONENTS):
+        raise ValueError(
+            f"correlation must be a {N_COMPONENTS}x{N_COMPONENTS} matrix"
+        )
+    return m
+
+
 def calculate_properties(
-    composition: np.ndarray,
-    uncertainty: np.ndarray,
-    correlation: np.ndarray,
+    composition: CompositionInput,
+    uncertainty: UncertaintyInput = None,
+    correlation: CorrelationInput = None,
     *,
     combustion_temperature: float = 25.0,
     volume_temperature: float = 15.0,
@@ -43,16 +106,29 @@ def calculate_properties(
     Parameters
     ----------
     composition
-        Length-60 numeric array of mole fractions [mol/mol] in the
-        component order of ISO 6976:2016 Table A.2. If values are given in
-        mol %, divide by 100 before passing them here.
+        Mole fractions [mol/mol]. Either:
+
+        * a ``dict`` mapping component names to fractions, e.g.
+          ``{"methane": 0.95, "nitrogen": 0.05}``. Components that are
+          not mentioned are assumed to be zero.
+        * a length-60 numeric array in the component order of ISO
+          6976:2016 Table A.2.
+
+        If values are given in mol %, divide by 100 before passing them.
     uncertainty
-        Length-60 numeric array of standard uncertainties of the mole
-        fractions.
+        Optional standard uncertainties of the mole fractions. Same two
+        forms as ``composition``. Default: ``None`` (all zero — no
+        uncertainty propagation, ``u_*`` keys in the result will be 0).
     correlation
-        60x60 numeric matrix of correlation coefficients between component
-        mole fractions. Pass ``numpy.eye(60)`` when correlations are
-        unknown or assumed zero.
+        Optional correlations between component mole fractions. Either:
+
+        * a ``dict`` mapping ``(name1, name2)`` tuples to correlation
+          coefficients, e.g. ``{("methane", "ethane"): 0.3}``. All other
+          off-diagonal entries are assumed zero.
+        * a 60x60 numeric matrix.
+
+        Default: ``None`` (identity matrix — components assumed
+        uncorrelated).
     combustion_temperature
         Combustion reference temperature in °C. Permitted: 0, 15, 15.55,
         20, 25. Default: 25.
@@ -72,18 +148,10 @@ def calculate_properties(
         convention; see the module docstring of :mod:`iso6976` for the
         full list.
     """
-    x = np.asarray(composition, dtype=np.float64)
-    u = np.asarray(uncertainty, dtype=np.float64)
-    r = np.asarray(correlation, dtype=np.float64)
+    x = _composition_to_array(composition)
+    u = _uncertainty_to_array(uncertainty)
+    r = _correlation_to_matrix(correlation)
 
-    if x.shape != (N_COMPONENTS,):
-        raise ValueError(f"composition must have length {N_COMPONENTS}")
-    if u.shape != (N_COMPONENTS,):
-        raise ValueError(f"uncertainty must have length {N_COMPONENTS}")
-    if r.shape != (N_COMPONENTS, N_COMPONENTS):
-        raise ValueError(
-            f"correlation must be a {N_COMPONENTS}x{N_COMPONENTS} matrix"
-        )
     if not 90.0 <= pressure <= 110.0:
         raise ValueError("pressure must be in the range 90–110 kPa")
 

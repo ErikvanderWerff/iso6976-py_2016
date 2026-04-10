@@ -6,16 +6,28 @@ the uncertainty propagation of its Annex B.
 
 Basic usage::
 
-    import numpy as np
-    from iso6976 import calculate_properties, component_index
+    from iso6976 import calculate_properties
 
-    x = np.zeros(60)
-    x[component_index("methane")] = 1.0
+    # Only the components you actually have — the rest is assumed zero.
+    res = calculate_properties(
+        composition={"methane": 0.95, "nitrogen": 0.05},
+        combustion_temperature=15,
+        volume_temperature=15,
+    )
+
+With composition uncertainties (and optional correlations)::
 
     res = calculate_properties(
-        x, np.zeros(60), np.eye(60),
-        combustion_temperature=15, volume_temperature=15,
+        composition={"methane": 0.9, "ethane": 0.1},
+        uncertainty={"methane": 0.001, "ethane": 0.001},
+        correlation={("methane", "ethane"): 0.3},  # optional
+        combustion_temperature=15,
+        volume_temperature=15,
     )
+    print(res["Hcg"], res["u_Hcg"])
+
+Length-60 numpy arrays are still accepted for all three inputs, in the
+component order of ISO 6976:2016 Table A.2.
 
 The result dictionary contains (all numeric scalars):
 
@@ -47,7 +59,6 @@ from __future__ import annotations
 
 from .api import calculate_properties
 from .components import (
-    GasComponents,
     component_index,
     component_name,
     component_names,
@@ -58,7 +69,6 @@ __version__ = "0.1.0"
 __all__ = [
     "__version__",
     "calculate_properties",
-    "GasComponents",
     "component_index",
     "component_name",
     "component_names",

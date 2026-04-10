@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 
 from iso6976 import (
-    GasComponents,
     calculate_properties,
     component_index,
     component_name,
@@ -270,97 +269,6 @@ def test_component_name_errors_on_out_of_range():
 
 
 # ---------------------------------------------------------------------------
-# GasComponents class — construction, getters/setters
-# ---------------------------------------------------------------------------
-
-
-def test_gascomponents_defaults():
-    gc = GasComponents()
-    assert np.all(gc.fractions == 0.0)
-    assert gc.fractions.shape == (60,)
-    assert np.all(gc.uncertainties == 0.0)
-    assert np.array_equal(gc.correlations, np.eye(60))
-
-
-def test_gascomponents_fraction_by_index_and_name():
-    gc = GasComponents()
-    gc.set_fraction(0, 0.9)
-    assert gc.get_fraction(0) == 0.9
-    assert gc.get_fraction("methane") == 0.9
-
-    gc.set_fraction("nitrogen", 0.05)
-    assert gc.get_fraction(51) == 0.05
-    assert gc.get_fraction("nitrogen") == 0.05
-
-
-def test_gascomponents_uncertainty_by_index_and_name():
-    gc = GasComponents()
-    gc.set_uncertainty(0, 0.001)
-    assert gc.get_uncertainty(0) == 0.001
-    assert gc.get_uncertainty("methane") == 0.001
-
-    gc.set_uncertainty("carbon dioxide", 0.0005)
-    assert gc.get_uncertainty(53) == 0.0005
-
-
-def test_gascomponents_correlation_is_symmetric():
-    gc = GasComponents()
-    gc.set_correlation(0, 1, 0.3)
-    assert gc.get_correlation(0, 1) == 0.3
-    assert gc.get_correlation(1, 0) == 0.3
-    assert gc.correlations[0, 1] == 0.3
-    assert gc.correlations[1, 0] == 0.3
-
-
-def test_gascomponents_bulk_setters():
-    gc = GasComponents()
-    x = np.zeros(60); x[0] = 0.85; x[51] = 0.15
-    gc.set_fraction_array(x)
-    assert np.array_equal(gc.fractions, x)
-
-    u = np.full(60, 0.001)
-    gc.set_uncertainty_array(u)
-    assert np.array_equal(gc.uncertainties, u)
-
-    r = np.eye(60)
-    r[0, 1] = r[1, 0] = -0.5
-    gc.set_correlation_matrix(r)
-    assert gc.correlations[0, 1] == -0.5
-    assert gc.correlations[1, 0] == -0.5
-
-
-def test_gascomponents_bulk_setter_length_validation():
-    gc = GasComponents()
-    with pytest.raises(ValueError, match="length 60"):
-        gc.set_fraction_array(np.zeros(59))
-    with pytest.raises(ValueError, match="length 60"):
-        gc.set_fraction_array(np.zeros(61))
-    with pytest.raises(ValueError, match="length 60"):
-        gc.set_uncertainty_array(np.zeros(1))
-
-
-def test_gascomponents_correlation_matrix_validation():
-    gc = GasComponents()
-    with pytest.raises(ValueError, match="60x60"):
-        gc.set_correlation_matrix(np.zeros((59, 60)))
-
-    bad = np.eye(60)
-    bad[0, 1] = 1.1
-    with pytest.raises(ValueError, match=r"\[-1, 1\]"):
-        gc.set_correlation_matrix(bad)
-
-
-def test_gascomponents_resolve_errors_on_bad_input():
-    gc = GasComponents()
-    with pytest.raises(IndexError):
-        gc.get_fraction(-1)
-    with pytest.raises(IndexError):
-        gc.get_fraction(60)
-    with pytest.raises(ValueError, match="Unknown component"):
-        gc.get_fraction("unobtainium")
-
-
-# ---------------------------------------------------------------------------
 # calculate_properties — input validation
 # ---------------------------------------------------------------------------
 
@@ -447,3 +355,128 @@ def test_coverage_factor_does_not_affect_values():
     )
     for key in _DET_KEYS:
         assert r5[key] == pytest.approx(r1[key], abs=1e-12), key
+
+
+# ---------------------------------------------------------------------------
+# Dict-based API
+# ---------------------------------------------------------------------------
+
+
+def test_dict_composition_matches_array_composition():
+    x, u, r = _load("example1")
+    comp_dict = {component_name(i): float(x[i]) for i in range(60) if x[i] != 0.0}
+    unc_dict = {component_name(i): float(u[i]) for i in range(60) if u[i] != 0.0}
+
+    res_array = calculate_properties(
+        x, u, r,
+        combustion_temperature=15, volume_temperature=15,
+    )
+    res_dict = calculate_properties(
+        comp_dict, unc_dict, r,
+        combustion_temperature=15, volume_temperature=15,
+    )
+    for key in _DET_KEYS + _U_KEYS:
+        assert res_dict[key] == pytest.approx(res_array[key], abs=1e-12), key
+
+
+def test_dict_composition_only_methane_nitrogen():
+    res = calculate_properties(
+        {"methane": 0.95, "nitrogen": 0.05},
+        combustion_temperature=15, volume_temperature=15,
+    )
+    # Deterministic values must be finite and physically sane.
+    assert res["M"] > 0
+    assert 0.9 < res["Z"] < 1.0
+    assert res["Hcg"] > 0
+    assert res["Hcn"] > 0
+    assert res["Hcn"] < res["Hcg"]
+    # Without composition uncertainty, u_* is driven only by the residual
+    # uncertainty of the tabulated physical constants — so still finite and
+    # non-negative, but small.
+    for key in _U_KEYS:
+        assert np.isfinite(res[key]) and res[key] >= 0.0, key
+
+
+def test_dict_uncertainty_default_matches_explicit_zero():
+    """Omitting uncertainty must give the same result as passing zeros."""
+    res_default = calculate_properties(
+        {"methane": 0.9, "ethane": 0.1},
+        combustion_temperature=15, volume_temperature=15,
+    )
+    res_zero = calculate_properties(
+        {"methane": 0.9, "ethane": 0.1},
+        uncertainty={},  # empty dict → all-zero
+        combustion_temperature=15, volume_temperature=15,
+    )
+    res_zero_array = calculate_properties(
+        {"methane": 0.9, "ethane": 0.1},
+        uncertainty=np.zeros(60),
+        combustion_temperature=15, volume_temperature=15,
+    )
+    for key in _DET_KEYS + _U_KEYS:
+        assert res_default[key] == pytest.approx(res_zero[key], abs=1e-12), key
+        assert res_default[key] == pytest.approx(res_zero_array[key], abs=1e-12), key
+
+
+def test_dict_correlation_optional_defaults_to_identity():
+    x, u, _ = _load("example1")
+    comp_dict = {component_name(i): float(x[i]) for i in range(60) if x[i] != 0.0}
+    unc_dict = {component_name(i): float(u[i]) for i in range(60) if u[i] != 0.0}
+
+    res_default = calculate_properties(
+        comp_dict, unc_dict,
+        combustion_temperature=15, volume_temperature=15,
+    )
+    res_identity = calculate_properties(
+        comp_dict, unc_dict, np.eye(60),
+        combustion_temperature=15, volume_temperature=15,
+    )
+    for key in _DET_KEYS + _U_KEYS:
+        assert res_default[key] == pytest.approx(res_identity[key], abs=1e-12), key
+
+
+def test_dict_correlation_as_dict():
+    comp = {"methane": 0.9, "ethane": 0.1}
+    unc = {"methane": 0.001, "ethane": 0.001}
+
+    res_uncorr = calculate_properties(
+        comp, unc,
+        combustion_temperature=15, volume_temperature=15,
+    )
+    res_corr = calculate_properties(
+        comp, unc, {("methane", "ethane"): 0.5},
+        combustion_temperature=15, volume_temperature=15,
+    )
+    # Deterministic values unchanged; uncertainties shift with correlation.
+    for key in _DET_KEYS:
+        assert res_corr[key] == pytest.approx(res_uncorr[key], abs=1e-12), key
+    assert res_corr["u_Hcg"] != pytest.approx(res_uncorr["u_Hcg"], abs=1e-10)
+
+
+def test_dict_composition_rejects_unknown_component():
+    with pytest.raises(ValueError, match="Unknown component"):
+        calculate_properties({"methane": 0.9, "unobtainium": 0.1})
+
+
+def test_dict_uncertainty_rejects_unknown_component():
+    with pytest.raises(ValueError, match="Unknown component"):
+        calculate_properties(
+            {"methane": 1.0},
+            uncertainty={"unobtainium": 0.01},
+        )
+
+
+def test_dict_correlation_rejects_unknown_component():
+    with pytest.raises(ValueError, match="Unknown component"):
+        calculate_properties(
+            {"methane": 0.9, "ethane": 0.1},
+            correlation={("methane", "unobtainium"): 0.3},
+        )
+
+
+def test_dict_correlation_rejects_out_of_range_value():
+    with pytest.raises(ValueError, match=r"\[-1, 1\]"):
+        calculate_properties(
+            {"methane": 0.9, "ethane": 0.1},
+            correlation={("methane", "ethane"): 1.5},
+        )
