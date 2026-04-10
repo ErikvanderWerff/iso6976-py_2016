@@ -13,3 +13,6 @@ dist/
 htmlcov/
 .vscode/
 .idea/
+
+# ISO standards (copyrighted — never commit)
+ISO6976_2016.pdf
