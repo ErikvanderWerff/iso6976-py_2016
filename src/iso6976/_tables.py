@@ -176,6 +176,9 @@ T_S: np.ndarray       = np.array([0.0, 15.0, 15.55, 20.0], dtype=np.float64)
 Z_AIR: np.ndarray     = np.array([0.999419, 0.999595, 0.999601, 0.999645], dtype=np.float64)
 U_Z_AIR: np.ndarray   = np.array([0.000015, 0.000015, 0.000015, 0.000015], dtype=np.float64)
 
+# Named view of Table A.3 last column: standard uncertainty u(s_i).
+U_S_I: np.ndarray = TAB_S[:, 4]
+
 # ---------------------------------------------------------------------------
 # ISO 6976:2016 Table A.4 — ideal-gas gross calorific values H_ch,i^o [kJ/mol]
 # Columns: at 0 °C, 15 °C, 15.55 °C, 20 °C, 25 °C, and u(H_ch).
@@ -247,6 +250,9 @@ TAB_HC: np.ndarray = np.array([
 # Temperature indices for Table A.4 (°C).
 T_HC: np.ndarray = np.array([0.0, 15.0, 15.55, 20.0, 25.0], dtype=np.float64)
 
+# Named view of Table A.4 last column: standard uncertainty u(H_ch,i) [kJ/mol].
+U_HC_I: np.ndarray = TAB_HC[:, 5]
+
 # Standard enthalpy of vaporisation of water at the T_HC temperatures [kJ/mol]
 # plus its uncertainty (ISO 6976:2016 Table A.4 footnote, used in Eq. (3)).
 L_VAP: np.ndarray   = np.array([45.064, 44.431, 44.408, 44.222, 44.013], dtype=np.float64)
@@ -303,31 +309,21 @@ U_M, R_M = _build_molar_mass_uncertainty()
 # Temperature-index lookup helpers
 # ---------------------------------------------------------------------------
 
-# Allowed combustion temperatures (for Table A.4) and volume temperatures
-# (for Table A.3). The 15.55 value is tolerant to tiny rounding noise.
+# Allowed combustion temperatures (Table A.4) and volume temperatures
+# (Table A.3). Callers are expected to pass an exact match from these tuples;
+# tolerance handling for 15.55 rounding noise lives in the public API layer.
 ALLOWED_T_HC: tuple[float, ...] = (0.0, 15.0, 15.55, 20.0, 25.0)
 ALLOWED_T_S: tuple[float, ...] = (0.0, 15.0, 15.55, 20.0)
+
+_HC_INDEX: dict[float, int] = {t: i for i, t in enumerate(ALLOWED_T_HC)}
+_S_INDEX: dict[float, int] = {t: i for i, t in enumerate(ALLOWED_T_S)}
 
 
 def idx_hc(t: float) -> int:
     """Return column index into Table A.4 for combustion temperature t [°C]."""
-    if 15.54 < t < 15.56:
-        t = 15.55
-    for i, tt in enumerate(ALLOWED_T_HC):
-        if t == tt:
-            return i
-    raise ValueError(
-        f"combustion temperature {t} not in {ALLOWED_T_HC}"
-    )
+    return _HC_INDEX[t]
 
 
 def idx_s(t: float) -> int:
     """Return column index into Table A.3 / Z_air for volume temperature t [°C]."""
-    if 15.54 < t < 15.56:
-        t = 15.55
-    for i, tt in enumerate(ALLOWED_T_S):
-        if t == tt:
-            return i
-    raise ValueError(
-        f"volume temperature {t} not in {ALLOWED_T_S}"
-    )
+    return _S_INDEX[t]

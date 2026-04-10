@@ -11,11 +11,21 @@ from ._tables import (
     M_AIR,
     N_COMPONENTS,
     P_REF,
-    T_S,
     Z_AIR,
     idx_hc,
     idx_s,
 )
+
+
+def _normalize_temperature(
+    t: float, allowed: tuple[float, ...], name: str
+) -> float:
+    """Snap 15.55 rounding noise, then check against the allowed values."""
+    if 15.54 < t < 15.56:
+        t = 15.55
+    if t not in allowed:
+        raise ValueError(f"{name} must be one of {allowed}")
+    return t
 
 
 def calculate_properties(
@@ -74,48 +84,42 @@ def calculate_properties(
         raise ValueError(
             f"correlation must be a {N_COMPONENTS}x{N_COMPONENTS} matrix"
         )
-    if combustion_temperature not in ALLOWED_T_HC:
-        raise ValueError(
-            f"combustion_temperature must be one of {ALLOWED_T_HC}"
-        )
-    if volume_temperature not in ALLOWED_T_S:
-        raise ValueError(
-            f"volume_temperature must be one of {ALLOWED_T_S}"
-        )
     if not 90.0 <= pressure <= 110.0:
         raise ValueError("pressure must be in the range 90–110 kPa")
 
+    combustion_temperature = _normalize_temperature(
+        combustion_temperature, ALLOWED_T_HC, "combustion_temperature",
+    )
+    volume_temperature = _normalize_temperature(
+        volume_temperature, ALLOWED_T_S, "volume_temperature",
+    )
+
     kh = idx_hc(combustion_temperature)
     ks = idx_s(volume_temperature)
-    p2 = pressure
     k = coverage
 
-    # ---- values ----
-    M = _calc.molar_mass(x)
-    Z = _calc.compression_factor(x, p2, ks)
-    if Z <= 0.9:
+    ctx = _calc.build_context(x, u, r, kh, ks, pressure)
+    if ctx.Z <= 0.9:
         raise ValueError("computed Z <= 0.9: outside application range")
 
-    Hcg = _calc.molar_gcv(x, kh)
-    Hcn = _calc.molar_ncv(x, kh)
+    M, Hcg, Hcn, Vo, Z = ctx.M, ctx.Hcg, ctx.Hcn, ctx.Vo, ctx.Z
+
+    # ---- deterministic values ----
     Hmg = Hcg / M
     Hmn = Hcn / M
 
-    Vo = _calc.ideal_molar_volume(volume_temperature, p2)   # ideal molar volume
-    V = Z * Vo                                              # real molar volume (Eq. 11)
+    V = Z * Vo                # real molar volume, Eq. (11)
+    Hvg_o = Hcg / Vo          # Eq. (7)  — ideal-gas vol. GCV
+    Hvn_o = Hcn / Vo          # Eq. (9)  — ideal-gas vol. NCV
+    Hvg = Hcg / V             # Eq. (10) — real-gas vol. GCV
+    Hvn = Hcn / V             # Eq. (12) — real-gas vol. NCV
 
-    Hvg_o = Hcg / Vo    # Eq. (7)  — ideal-gas vol. GCV
-    Hvn_o = Hcn / Vo    # Eq. (9)  — ideal-gas vol. NCV
-    Hvg = Hcg / V       # Eq. (10) — real-gas vol. GCV
-    Hvn = Hcn / V       # Eq. (12) — real-gas vol. NCV
+    G_o = M / M_AIR           # Eq. (13) — ideal relative density
+    D_o = M / Vo              # Eq. (14) — ideal density
 
-    G_o = M / M_AIR     # Eq. (13) — ideal relative density
-    D_o = M / Vo        # Eq. (14) — ideal density
-
-    Z_air = Z_AIR[ks]
-    Z_air_real = 1.0 - p2 / P_REF * (1.0 - Z_air)   # Eq. (18)
-    G = G_o * Z_air_real / Z                        # Eq. (17)
-    D = D_o / Z                                     # Eq. (19)
+    Z_air_real = 1.0 - pressure / P_REF * (1.0 - Z_AIR[ks])   # Eq. (18)
+    G = G_o * Z_air_real / Z                                  # Eq. (17)
+    D = D_o / Z                                               # Eq. (19)
 
     sqrt_G_o = np.sqrt(G_o)
     sqrt_G = np.sqrt(G)
@@ -124,21 +128,22 @@ def calculate_properties(
     Wg = Hvg / sqrt_G         # Eq. (20)
     Wn = Hvn / sqrt_G         # Eq. (21)
 
-    # ---- uncertainties ----
-    uHcg = _calc.u_Hc_o_G(x, u, r, kh)
-    uHcn = _calc.u_Hc_o_N(x, u, r, kh)
-    uHmg = _calc.u_Hm_o_G(x, u, r, kh)
-    uHmn = _calc.u_Hm_o_N(x, u, r, kh)
-    uHvg_o = _calc.u_Hv_o_G(x, u, r, kh, ks, Z, p2)
-    uHvn_o = _calc.u_Hv_o_N(x, u, r, kh, ks, Z, p2)
-    # u(H_v,G): same relative uncertainty as u(H_v^o,G) but applied to H_v = H_v^o / Z.
+    # ---- uncertainties (all computed from the same Context) ----
+    uHcg = _calc.u_Hc_o(ctx, gross=True)
+    uHcn = _calc.u_Hc_o(ctx, gross=False)
+    uHmg = _calc.u_Hm_o(ctx, gross=True)
+    uHmn = _calc.u_Hm_o(ctx, gross=False)
+    uHvg_o = _calc.u_Hv_o(ctx, gross=True)
+    uHvn_o = _calc.u_Hv_o(ctx, gross=False)
+    # Eq. (10)/(12): H_v = H_v^o / Z with Z treated as a constant factor, so
+    # the same relative uncertainty applies to both.
     uHvg = uHvg_o / Z
     uHvn = uHvn_o / Z
 
-    uD = _calc.u_D(x, u, r, ks, Z, D, p2)
-    uG = _calc.u_G(x, u, r, ks, Z, G, p2)
-    uWg = _calc.u_W_G(x, u, r, kh, ks, Z, Wg, p2)
-    uWn = _calc.u_W_N(x, u, r, kh, ks, Z, Wn, p2)
+    uD = _calc.u_D(ctx, D)
+    uG = _calc.u_G(ctx, G)
+    uWg = _calc.u_W(ctx, Wg, gross=True)
+    uWn = _calc.u_W(ctx, Wn, gross=False)
 
     return {
         "M":      M,
