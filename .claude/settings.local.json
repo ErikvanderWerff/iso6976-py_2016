@@ -1,7 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m pytest -q)"
+      "Bash(python -m pytest -q)",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(python -m pip install pytest -q)",
+      "Bash(python -m pip install -e . -q)",
+      "Bash(python -c \"from iso6976 import calculate_properties; r = calculate_properties\\({'methane': 1.0}\\); print\\({k:v for k,v in r.items\\(\\) if k.startswith\\('u_'\\)}\\)\")",
+      "Bash(python -m pip install pypdf -q)",
+      "Bash(python -c \"from pypdf import PdfReader; r = PdfReader\\('ISO6976_2016.pdf'\\); print\\('pages:', len\\(r.pages\\)\\)\")",
+      "Bash(python -c ':*)",
+      "Read(//tmp/**)",
+      "Read(//c/Users/erikv/AppData/Local/Temp/**)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python \"C:/Users/erikv/AppData/Local/Temp/verify_annex_d.py\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\erikv\\AppData\\Local\\Temp"
     ]
   }
 }
