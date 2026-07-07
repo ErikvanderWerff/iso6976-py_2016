@@ -1,4 +1,4 @@
-# iso6976
+# ISO6976:2016
 
 Python implementation of **ISO 6976:2016** — *Natural Gas — Calculation of calorific values, density, relative density and Wobbe indices from composition*.
 
